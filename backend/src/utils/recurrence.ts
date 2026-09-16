@@ -75,3 +75,20 @@ export function enumerateOccurrences({ frequency, anchor, low, high }: Occurrenc
 export function formatDate(value: Dayjs | string): string {
   return dayjs(value).format(DATE_FORMAT);
 }
+
+/**
+ * Strict 'YYYY-MM-DD' calendar validation. dayjs (and native Date) silently roll
+ * an impossible date such as 2026-02-30 over to 2026-03-02, so existence must be
+ * checked against the month's real length instead of relying on parse validity.
+ */
+export function isValidCalendarDate(value: string | null | undefined): value is string {
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1) return false;
+  // new Date(year, month, 0) is the last day of the 1-based `month`.
+  return day <= new Date(year, month, 0).getDate();
+}

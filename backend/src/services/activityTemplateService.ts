@@ -10,7 +10,7 @@ import { ActivityTemplate } from '../models/activityTemplate';
 import { ActivityTemplateGeneration } from '../models/activityTemplateGeneration';
 import { AppError } from '../utils/AppError';
 import { logTemplate } from '../utils/logger';
-import { DATE_FORMAT } from '../utils/recurrence';
+import { DATE_FORMAT, isValidCalendarDate } from '../utils/recurrence';
 import { FactorService } from './factorService';
 import { RecurrenceGenerationService } from './recurrenceGenerationService';
 import { UserService } from './userService';
@@ -165,16 +165,28 @@ export class ActivityTemplateService {
 
   async pause(userId: number, id: number, pauseDate?: string) {
     await this.requireOwned(userId, id);
-    const at = pauseDate || dayjs().format(DATE_FORMAT);
+    const at = this.resolveActionDate(id, 'pause', pauseDate);
     const { template } = await this.generator.pauseTemplate(id, at);
     return { message: Messages.TEMPLATE_PAUSED, template };
   }
 
   async resume(userId: number, id: number, resumeDate?: string) {
     await this.requireOwned(userId, id);
-    const at = resumeDate || dayjs().format(DATE_FORMAT);
+    const at = this.resolveActionDate(id, 'resume', resumeDate);
     const { template } = await this.generator.resumeTemplate(id, at);
     return { message: Messages.TEMPLATE_RESUMED, template };
+  }
+
+  private resolveActionDate(id: number, action: string, value?: string): string {
+    const at = value || dayjs().format(DATE_FORMAT);
+    if (!isValidCalendarDate(at)) {
+      throw new AppError(
+        ErrorCodes.TEMPLATE_DATE_RANGE_INVALID,
+        `ActivityTemplate[id=${id}] ${action} failed: date ${value} is not a valid calendar date`,
+        HttpStatus.BAD_REQUEST
+      );
+    }
+    return at;
   }
 
   async remove(userId: number, id: number) {
@@ -216,13 +228,27 @@ export class ActivityTemplateService {
     if (!input.subType || !input.amount || Number(input.amount) <= 0) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, `ActivityTemplate[id=0] create failed: sub_type or amount invalid`, HttpStatus.BAD_REQUEST);
     }
-    const start = dayjs(input.startDate);
-    if (!start.isValid()) {
-      throw new AppError(ErrorCodes.TEMPLATE_DATE_RANGE_INVALID, `ActivityTemplate[id=0] create failed: start_date invalid`, HttpStatus.BAD_REQUEST);
+    // Reject impossible calendar dates (e.g. 2026-02-30) explicitly instead of
+    // letting dayjs roll them forward to 2026-03-02.
+    if (!isValidCalendarDate(input.startDate)) {
+      logTemplate('warn', 'TEMPLATE_CREATE_FAILED', { id: 0, field: 'ActivityTemplate.start_date', reason: 'not a real calendar date' });
+      throw new AppError(
+        ErrorCodes.TEMPLATE_DATE_RANGE_INVALID,
+        `ActivityTemplate[id=0] create failed: start_date ${input.startDate} is not a valid calendar date`,
+        HttpStatus.BAD_REQUEST
+      );
     }
+    const start = dayjs(input.startDate);
     if (input.endDate) {
-      const end = dayjs(input.endDate);
-      if (!end.isValid() || end.isBefore(start, 'day')) {
+      if (!isValidCalendarDate(input.endDate)) {
+        logTemplate('warn', 'TEMPLATE_CREATE_FAILED', { id: 0, field: 'ActivityTemplate.end_date', reason: 'not a real calendar date' });
+        throw new AppError(
+          ErrorCodes.TEMPLATE_DATE_RANGE_INVALID,
+          `ActivityTemplate[id=0] create failed: end_date ${input.endDate} is not a valid calendar date`,
+          HttpStatus.BAD_REQUEST
+        );
+      }
+      if (dayjs(input.endDate).isBefore(start, 'day')) {
         throw new AppError(
           ErrorCodes.TEMPLATE_DATE_RANGE_INVALID,
           `ActivityTemplate[id=0] create failed: end_date before start_date`,

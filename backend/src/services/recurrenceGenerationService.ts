@@ -310,7 +310,11 @@ export class RecurrenceGenerationService {
   private async reconcile(manager: EntityManager, template: ActivityTemplate, mode: RecomputeMode, options: ReconcileOptions = {}): Promise<ReconcileResult> {
     const result: ReconcileResult = { inserted: 0, updated: 0, removed: 0 };
     const now = today();
-    const hardEnd = options.highOverride !== undefined ? options.highOverride : minDate(template.endDate, now);
+    // Backfill can never produce rows later than today, regardless of the
+    // template end date or a pause date supplied in the future: a future pause
+    // settles the open segment through today, then simply freezes the template.
+    const requestedHigh = options.highOverride !== undefined ? options.highOverride : minDate(template.endDate, now);
+    const hardEnd = minDate(requestedHigh, now);
     const hardStart = template.startDate;
     // Occurrences older than the active segment are settled by backfill on enable
     // (effective=start) but never touched again after a "future only" edit/resume.
