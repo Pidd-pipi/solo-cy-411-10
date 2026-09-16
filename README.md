@@ -48,6 +48,31 @@ npm run dev
 
 本地开发时前端 Vite 会把 `/api` 代理到 `http://localhost:19411`。生产 Docker 中由 Nginx 将 `/api/` 反向代理到 `http://backend:3000/`，前端代码不硬编码 localhost。
 
+## 周期模板回归测试（真实 MySQL）
+
+回归测试**不使用内存替身、假仓储或单连接串行化**：用真实 Nest HTTP（supertest 风格请求，并发时走不同连接池连接）+ 真实 MySQL，独立连接做权威回读，并用第二条连接持有真实 InnoDB 行锁验证并发。
+
+先启动数据库（例如 `docker compose up -d db`，或任意可连的 MySQL 8），再执行：
+
+```bash
+cd backend
+npm install
+# 连接配置走环境变量，默认与 compose 一致（127.0.0.1:3306 / carbontrack_user / carbontrack_pwd / carbontrack_db）
+MYSQL_HOST=127.0.0.1 npm run test:e2e
+```
+
+`npm run test:e2e` 会先对库执行 `database/init.sql`（幂等），启动 App 后跑用例；每个用例使用独立用户并在结束后清理（外键级联删除模板/台账/活动，审计日志显式删除），可连续重复运行、结果一致。
+
+覆盖用例（`backend/test/recurrence.e2e-spec.ts`）：
+
+- 正常补算到当天、碳值正确、无未来日期；重复读取不重复生成。
+- 暂停日晚于当天：只补到当天；跨天暂停期间重复读取不新增；恢复后从恢复日续算、暂停区间不补（台账为 `detached` 空记录）。
+- 起始、结束、暂停、恢复四类入口对不存在的日历日期（如 `2026-02-30`）返回 400 `TEMPLATE_DATE_RANGE_INVALID`，且不留下半条数据。
+- 手工修改的生成记录在 `rebuild` 后保持原值，其余按新模板重算。
+- 月模板短月落到当月最后一天、次月恢复原 anchor 日（含闰年）。
+- 并发：第二连接持锁时 6 个并发补算全部 409 且零写入；8 个真实并发请求只有成功者写一次，台账/活动条数精确。
+- 因子缺失导致补算中途失败时整事务回滚：活动 0 条、台账 0 条、模板保持未启用。
+
 ## 技术栈
 
 | 层级 | 技术 |
