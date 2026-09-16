@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json --noEmit",
     "test:e2e": "node test/run-e2e.js",
+    "test:lifecycle": "jest --config test/lifecycle.jest.json --runInBand",
     "test:e2e:jest": "jest --config jest-e2e.json --runInBand",
     "lint": "eslint \"src/**/*.ts\""
   },

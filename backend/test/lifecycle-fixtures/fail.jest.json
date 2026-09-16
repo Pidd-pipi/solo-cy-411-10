@@ -1,0 +1,7 @@
+{
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testMatch": ["<rootDir>/fail.test.js"],
+  "forceExit": false,
+  "testTimeout": 10000
+}

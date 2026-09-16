@@ -52,7 +52,7 @@ npm run dev
 
 回归测试**不使用内存替身、假仓储或单连接串行化**：用真实 Nest HTTP（请求并发时走不同连接池连接）+ 真实 MySQL，独立连接做权威回读，并用第二条连接持有真实 InnoDB 行锁验证并发。
 
-**测试入口会自行用 Docker 启动一个隔离的一次性 MySQL 8 容器**（独立数据目录、随机本机端口、容器名 `carbontrack-e2e-*`），就绪后执行 `database/init.sql`、跑用例，结束自动 `docker rm -f` 清理。干净检出无需先准备数据库：
+**测试入口会自行用 Docker 启动一个隔离的一次性 MySQL 8 容器**（独立数据目录、随机本机端口、容器名 `carbontrack-e2e-*`），就绪后执行 `database/init.sql`、跑用例，结束自动 `docker rm -fv`（连匿名数据卷一起清理）。干净检出无需先准备数据库：
 
 ```bash
 cd backend
@@ -68,9 +68,21 @@ DB_USER=carbontrack_user DB_PASSWORD=carbontrack_pwd DB_NAME=carbontrack_db \
 npm run test:e2e
 ```
 
-退出码语义：`0` 成功且收尾干净；其它为 Jest 用例失败；`70` docker 不可用/启动/就绪阶段失败；`71` 收尾失败（终端会打印需手工 `docker rm -fv` 的容器名）；`72` 被信号中断；`73` 用例整体超时（疑似连接泄漏）。Jest **不使用 `--forceExit`**，未关闭的连接（App 端口或 mysql2 池）会直接表现为挂起/非零，不会被强制退出掩盖。
+退出码语义：`0` 成功且收尾干净；其它为 Jest 用例失败；`70` driver 不可用/启动/就绪阶段失败；`71` 收尾失败（终端会打印遗留资源名）；`72` 被信号中断；`73` 用例整体超时（疑似连接泄漏）；`74` 测试进程根本无法拉起。Jest **不使用 `--forceExit`**，未关闭的连接（App 端口或 mysql2 池）会直接表现为挂起/非零，不会被强制退出掩盖。
 
 每个用例使用独立用户并在结束后清理（外键级联删除模板/台账/活动，审计日志与测试专用因子显式删除），可连续重复运行、结果一致。
+
+### 测试入口自身的生命周期回归（无需 Docker）
+
+`npm run test:lifecycle`（`backend/test/lifecycle.spec.ts`）把真实的 `test/run-e2e.js` 当**真实 OS 子进程**反复拉起，用 `E2E_DRIVER=local`（`test/harness/local-driver.js`）驱动同一条生命周期：它 spawn 一个**真实长驻 TCP 服务进程**、分配真实端口、创建真实临时数据目录、用**真实 TCP 连接**探活、收尾时真实 kill 进程并真实删除目录。断言真实退出码与磁盘/端口状态，不依赖假命令或日志文本：
+
+- 成功路径：服务真实启动 → 真实 Jest 子进程通过 → 端口确已关闭、临时数据目录无残留。
+- 启动阶段失败（服务进程启动即退出）：返回 `70` 且标注 `[start]`，Jest 未被拉起，半成品目录被清理。
+- 测试进程无法拉起（`E2E_JEST_NODE` 指向不存在的二进制）：返回独立码 `74`，服务仍被收尾。
+- 用例失败：返回非零的 Jest 失败码（非 `71`），但收尾依旧执行、数据目录清空。
+- 收尾失败（`E2E_LOCAL_STOP_FAIL=1` 制造真实目录只读 EPERM；root 下由 driver 显式抛错）：返回独立码 `71`，并真实保留待人工清理的资源（测试自身负责复位）。
+
+`local` driver 仅用于生命周期编排回归；周期模板业务用例（`recurrence.e2e-spec.ts`）仍只走 `E2E_DRIVER=docker` 的真实 MySQL，真实 HTTP、独立连接、行锁与整事务回滚断言保持不变。
 
 覆盖用例（`backend/test/recurrence.e2e-spec.ts`，编排见 `backend/test/run-e2e.js`、`backend/test/harness/mysql-docker.js`）：
 

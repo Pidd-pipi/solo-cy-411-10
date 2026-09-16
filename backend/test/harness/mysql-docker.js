@@ -1,17 +1,13 @@
 /* eslint-disable */
 /**
- * Ephemeral, ISOLATED, REAL MySQL 8 lifecycle for the recurrence e2e suite.
+ * Docker / MySQL driver for the e2e lifecycle.
  *
- * On a clean checkout there is no running database, so the test entry point
- * starts its own throwaway MySQL container (a real persistent server with its
- * own data directory on a private port), waits until the application user can
- * actually log in, runs Jest, and then force-removes the container together with
- * its anonymous data volume. Nothing is mocked and no shared/developer database
- * is touched; the schema is applied by the test layer (bootstrapSchema).
+ * Manages a REAL, ISOLATED MySQL 8 container (its own data directory on a
+ * private port). Readiness is proven by logging in with the application
+ * credentials inside the container; teardown force-removes the container AND
+ * its anonymous volume. No shared/developer database is touched.
  *
- * Escape hatch for CI that already provides MySQL: set E2E_DB=external together
- * with MYSQL_HOST/PORT/DB_USER/DB_PASSWORD/DB_NAME — the harness then only waits
- * for readiness and never starts/stops a container.
+ * CI escape hatch (E2E_DB=external) is handled by run-e2e.js directly.
  */
 const net = require('net');
 const { execFile } = require('child_process');
@@ -85,111 +81,78 @@ async function ensureImage(image) {
   await run('docker', ['pull', image]);
 }
 
-/** True when the application credentials can open the target database. */
-async function dbReady(container, host, port, user, password, database) {
-  if (container) {
+const dockerDriver = {
+  name: 'docker',
+
+  /** Start a real container; readiness is checked separately via isReady(). */
+  async start() {
+    if (!(await dockerAvailable())) {
+      throw new PhaseError('docker', 'Docker is required to run the real-MySQL e2e suite (or set E2E_DB=external with a reachable MySQL, or E2E_DRIVER=local).');
+    }
+    const host = '127.0.0.1';
+    const port = await freePort();
+    const stamp = `${Date.now()}-${process.pid}`;
+    const name = `carbontrack-e2e-${stamp}`;
+
+    await run('docker', ['rm', '-fv', name]).catch(() => undefined);
+
+    try {
+      await ensureImage(DEFAULT_IMAGE);
+      await run('docker', [
+        'run', '-d', '--name', name,
+        '-e', `MYSQL_ROOT_PASSWORD=${ROOT_PASSWORD}`,
+        '-e', `MYSQL_DATABASE=${APP_DB}`,
+        '-e', `MYSQL_USER=${APP_USER}`,
+        '-e', `MYSQL_PASSWORD=${APP_PASSWORD}`,
+        '-p', `${host}:${port}:3306`,
+        DEFAULT_IMAGE
+      ]);
+    } catch (error) {
+      await run('docker', ['rm', '-fv', name]).catch(() => undefined);
+      throw new PhaseError('start', `failed to start ${DEFAULT_IMAGE} container ${name}`, error);
+    }
+
+    return { name, host, port };
+  },
+
+  /** Real login from inside the container. */
+  async isReady(target) {
     try {
       await run('docker', [
-        'exec',
-        container,
-        'mysql',
-        '-h127.0.0.1',
-        `-u${user}`,
-        `-p${password}`,
-        '-Nse',
-        'SELECT 1',
-        database
+        'exec', target.name, 'mysql',
+        '-h127.0.0.1', `-u${APP_USER}`, `-p${APP_PASSWORD}`,
+        '-Nse', 'SELECT 1', APP_DB
       ]);
       return true;
     } catch {
       return false;
     }
-  }
-  // external DB: TCP connect probe (credentials are validated later by the app)
-  return new Promise((resolve) => {
-    const socket = net.connect({ host, port }, () => {
-      socket.end();
-      resolve(true);
-    });
-    socket.on('error', () => resolve(false));
-    socket.setTimeout(2000, () => {
-      socket.destroy();
-      resolve(false);
-    });
-  });
-}
+  },
 
-async function waitForReady({ container, host, port, user, password, database }, timeoutMs, phase) {
-  const deadline = Date.now() + timeoutMs;
-  let lastErr = '';
-  while (Date.now() < deadline) {
+  async stop(name) {
     try {
-      if (await dbReady(container, host, port, user, password, database)) return;
+      // -v also removes the anonymous /var/lib/mysql volume: full cleanup.
+      await run('docker', ['rm', '-fv', name]);
     } catch (error) {
-      lastErr = causeMessage(error);
+      throw new PhaseError('teardown', `failed to remove container ${name}`, error);
     }
-    await new Promise((r) => setTimeout(r, 1500));
+  },
+
+  async exists(name) {
+    try {
+      await run('docker', ['inspect', '-f', '{{.Id}}', name]);
+      return true;
+    } catch {
+      return false;
+    }
   }
-  throw new PhaseError(phase, `MySQL did not become ready within ${Math.round(timeoutMs / 1000)}s`, lastErr);
-}
-
-async function startContainer() {
-  if (!(await dockerAvailable())) {
-    throw new PhaseError('docker', 'Docker is required to run the real-MySQL e2e suite (or set E2E_DB=external with a reachable MySQL).');
-  }
-  const host = '127.0.0.1';
-  const port = await freePort();
-  const stamp = `${Date.now()}-${process.pid}`;
-  const name = `carbontrack-e2e-${stamp}`;
-
-  // Clear any same-named leftover (extremely unlikely) before starting.
-  await run('docker', ['rm', '-fv', name]).catch(() => undefined);
-
-  try {
-    await ensureImage(DEFAULT_IMAGE);
-    await run('docker', [
-      'run',
-      '-d',
-      '--name',
-      name,
-      '-e',
-      `MYSQL_ROOT_PASSWORD=${ROOT_PASSWORD}`,
-      '-e',
-      `MYSQL_DATABASE=${APP_DB}`,
-      '-e',
-      `MYSQL_USER=${APP_USER}`,
-      '-e',
-      `MYSQL_PASSWORD=${APP_PASSWORD}`,
-      '-p',
-      `${host}:${port}:3306`,
-      DEFAULT_IMAGE
-    ]);
-  } catch (error) {
-    await run('docker', ['rm', '-fv', name]).catch(() => undefined);
-    throw new PhaseError('start', `failed to start ${DEFAULT_IMAGE} container ${name}`, error);
-  }
-
-  await waitForReady({ container: name, host, port, user: APP_USER, password: APP_PASSWORD, database: APP_DB }, 150000, 'ready');
-
-  return { name, host, port };
-}
-
-async function stopContainer(name) {
-  if (!name) return;
-  try {
-    // -v also removes the anonymous /var/lib/mysql volume: full cleanup, no residue.
-    await run('docker', ['rm', '-fv', name]);
-  } catch (error) {
-    throw new PhaseError('teardown', `failed to remove container ${name}`, error);
-  }
-}
+};
 
 module.exports = {
+  dockerDriver,
   PhaseError,
-  startContainer,
-  stopContainer,
-  waitForReady,
   APP_USER,
   APP_PASSWORD,
-  APP_DB
+  APP_DB,
+  freePort
 };
