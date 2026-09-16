@@ -4,12 +4,15 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { databaseConfig } from './config/database';
 import { AppController } from './app.controller';
 import { activityRouteControllers } from './routes/activities';
+import { activityTemplateRouteControllers } from './routes/activityTemplates';
 import { auditRouteControllers } from './routes/audit';
 import { factorRouteControllers } from './routes/factors';
 import { goalRouteControllers } from './routes/goals';
 import { rankingRouteControllers } from './routes/ranking';
 import { userRouteControllers } from './routes/users';
 import { Activity } from './models/activity';
+import { ActivityTemplate } from './models/activityTemplate';
+import { ActivityTemplateGeneration } from './models/activityTemplateGeneration';
 import { AuditLog } from './models/auditLog';
 import { CarbonFactor } from './models/carbonFactor';
 import { Goal } from './models/goal';
@@ -18,18 +21,25 @@ import { User } from './models/user';
 import { AuditLogger } from './middlewares/auditLogger';
 import { ErrorHandler } from './middlewares/errorHandler';
 import { ActivityService } from './services/activityService';
+import { ActivityTemplateService } from './services/activityTemplateService';
 import { AuditLogService } from './services/auditLogService';
 import { FactorService } from './services/factorService';
 import { GoalService } from './services/goalService';
 import { RankingService } from './services/rankingService';
+import { RecurrenceGenerationService } from './services/recurrenceGenerationService';
+import { SchemaSyncService } from './services/schemaSyncService';
 import { UserService } from './services/userService';
 
 @Module({
-  imports: [TypeOrmModule.forRoot(databaseConfig()), TypeOrmModule.forFeature([User, Role, Activity, Goal, CarbonFactor, AuditLog])],
+  imports: [
+    TypeOrmModule.forRoot(databaseConfig()),
+    TypeOrmModule.forFeature([User, Role, Activity, Goal, CarbonFactor, AuditLog, ActivityTemplate, ActivityTemplateGeneration])
+  ],
   controllers: [
     AppController,
     ...userRouteControllers,
     ...activityRouteControllers,
+    ...activityTemplateRouteControllers,
     ...goalRouteControllers,
     ...factorRouteControllers,
     ...auditRouteControllers,
@@ -37,11 +47,14 @@ import { UserService } from './services/userService';
   ],
   providers: [
     UserService,
-    ActivityService,
-    GoalService,
     FactorService,
+    RecurrenceGenerationService,
+    ActivityService,
+    ActivityTemplateService,
+    GoalService,
     AuditLogService,
     RankingService,
+    SchemaSyncService,
     { provide: APP_INTERCEPTOR, useClass: AuditLogger },
     { provide: APP_FILTER, useClass: ErrorHandler }
   ]

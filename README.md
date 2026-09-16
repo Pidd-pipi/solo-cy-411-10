@@ -25,6 +25,7 @@ docker compose down
 
 - 用户注册、登录、JWT 认证和 RBAC 权限校验
 - 活动记录新增、编辑、删除、分类筛选和分页列表
+- 周期模板按日/周/月自动生成活动：启用即补算截至当天的缺记录，暂停不补记、恢复从恢复日续算，月模板短月落到当月最后一天且下月恢复原日
 - CarbonFactor 按地区与分类匹配并自动计算 `carbon_value`
 - 仪表盘展示今日、本周、本月碳排放和趋势图
 - 目标管理展示目标完成进度和到期区间
@@ -121,6 +122,15 @@ npm run dev
 - Activity：`database/init.sql` → `backend/src/models/activity.ts` → `backend/src/services/activityService.ts` → `backend/src/controllers/activityController.ts` → `backend/src/routes/activities.ts` → `frontend/src/api/activity.ts` → `frontend/src/stores/activityStore.ts` → `frontend/src/pages/Activities.tsx`
 - Goal：`database/init.sql` → `backend/src/models/goal.ts` → `backend/src/services/goalService.ts` → `backend/src/controllers/goalController.ts` → `backend/src/routes/goals.ts` → `frontend/src/api/goal.ts` → `frontend/src/stores/goalStore.ts` → `frontend/src/pages/Goals.tsx`
 - CarbonFactor：`database/init.sql` → `backend/src/models/carbonFactor.ts` → `backend/src/services/factorService.ts` → `backend/src/controllers/factorController.ts` → `backend/src/routes/factors.ts` → `frontend/src/api/factor.ts` → `frontend/src/pages/Activities.tsx`
+- ActivityTemplate（周期模板）：`database/init.sql`（`activity_templates` + `activity_template_generations`）→ `backend/src/models/activityTemplate.ts`、`backend/src/models/activityTemplateGeneration.ts` → `backend/src/utils/recurrence.ts` → `backend/src/services/recurrenceGenerationService.ts`、`backend/src/services/activityTemplateService.ts` → `backend/src/controllers/activityTemplateController.ts` → `backend/src/routes/activityTemplates.ts` → `frontend/src/api/activityTemplate.ts` → `frontend/src/stores/activityTemplateStore.ts` → `frontend/src/pages/ActivityTemplates.tsx`
+
+### 周期模板补算与并发保证
+
+- 同模板同发生日唯一：台账表 `activity_template_generations` 的 `UNIQUE(template_id, occurrence_date)` 为最终幂等锚点。
+- 并发补算：单个 QueryRunner 事务内首条语句 `SELECT … FOR UPDATE NOWAIT` 锁定模板行（MySQL errno 3572 → 409 `TEMPLATE_BACKFILL_BUSY`），整批对账同事务提交，异常整体回滚，不留半批记录。
+- 台账状态：`generated`（可被重算）、`adjusted`（手工改过，永久保留）、`detached`（改了发生日或区间被移出）、`deleted`（删除墓碑，防止回补复活）。
+- 手工单条增删改接口（`/activities`）的筛选、分页与字段保持不变；生成行通过 `template_id / is_generated / manually_adjusted` 标记。仪表盘和目标进度继续汇总 `activities` 表，自动包含生成数据。
+- 已有数据卷通过 `SchemaSyncService`（`onModuleInit`）幂等建表/加列，无需手动迁移；新卷由 `database/init.sql` 初始化。
 
 ## 横切关注点
 
@@ -143,6 +153,13 @@ npm run dev
 - 后端引用：`backend/src/constants/errorCodes.ts`、`backend/src/constants/logTemplates.ts`、`backend/src/models/goal.ts`、`backend/src/services/goalService.ts`、`backend/src/routes/goals.ts`
 - 前端定义：`frontend/src/constants/goal.ts`
 - 前端引用：`frontend/src/constants/errorCodes.ts`、`frontend/src/constants/messages.ts`、`frontend/src/types/entities.ts`、`frontend/src/api/goal.ts`、`frontend/src/components/common/GoalProgressCard.tsx`、`frontend/src/pages/Goals.tsx`、`frontend/src/utils/formatters.ts`
+
+### RecurrenceFrequency（新增）
+
+- 后端定义：`backend/src/constants/recurrence.ts`
+- 后端引用：`backend/src/constants/errorCodes.ts`、`backend/src/constants/logTemplates.ts`、`backend/src/models/activityTemplate.ts`、`backend/src/models/activityTemplateGeneration.ts`、`backend/src/services/activityTemplateService.ts`、`backend/src/services/recurrenceGenerationService.ts`、`backend/src/utils/recurrence.ts`、`backend/src/routes/activityTemplates.ts`
+- 前端定义：`frontend/src/constants/recurrence.ts`
+- 前端引用：`frontend/src/constants/errorCodes.ts`、`frontend/src/constants/messages.ts`、`frontend/src/types/entities.ts`、`frontend/src/api/activityTemplate.ts`、`frontend/src/stores/activityTemplateStore.ts`、`frontend/src/pages/ActivityTemplates.tsx`、`frontend/src/utils/formatters.ts`
 
 ## 强制分层与耦合设计
 

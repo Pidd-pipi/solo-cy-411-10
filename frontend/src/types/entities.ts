@@ -1,5 +1,6 @@
 import { ActivityCategory } from '../constants/activity';
 import { GoalStatus } from '../constants/goal';
+import { RecurrenceFrequency } from '../constants/recurrence';
 
 export interface User {
   id: number;
@@ -33,6 +34,30 @@ export interface Activity {
   recordDate: string;
   note?: string | null;
   factor?: CarbonFactor | null;
+  templateId?: number | null;
+  isGenerated?: boolean;
+  manuallyAdjusted?: boolean;
+}
+
+export interface ActivityTemplate {
+  id: number;
+  userId: number;
+  name: string;
+  category: ActivityCategory;
+  subType: string;
+  amount: string;
+  unit: string;
+  frequency: RecurrenceFrequency;
+  startDate: string;
+  endDate?: string | null;
+  anchorDate: string;
+  effectiveDate: string;
+  enabled: boolean;
+  pausedAt?: string | null;
+  lastSyncedDate?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  generatedCount?: number;
 }
 
 export interface Goal {

@@ -1,5 +1,6 @@
 import { ActivityCategory } from './activity';
 import { GoalStatus } from './goal';
+import { RecurrenceFrequency } from './recurrence';
 
 export const LogTemplates = {
   USER_REGISTER_START: 'User[email={email}] register start',
@@ -24,6 +25,24 @@ export const LogTemplates = {
   GOAL_CREATE_SUCCESS: 'Goal[id={id}] create success target_value={targetValue}',
   GOAL_CREATE_FAILED: 'Goal[id={id}] create failed: {field} {reason}',
   GOAL_PROGRESS_CALCULATED: 'Goal[id={id}] progress calculated current={currentValue} target={targetValue}',
+  TEMPLATE_LIST_START: `ActivityTemplate list start frequencies=${Object.values(RecurrenceFrequency).join(',')}`,
+  TEMPLATE_CREATE_START: 'ActivityTemplate[user_id={userId}] create start frequency={frequency} category={category}',
+  TEMPLATE_CREATE_SUCCESS: 'ActivityTemplate[id={id}] create success amount={amount} {unit}',
+  TEMPLATE_CREATE_FAILED: 'ActivityTemplate[id={id}] create failed: {field} {reason}',
+  TEMPLATE_UPDATE_START: 'ActivityTemplate[id={id}] update start mode={mode} fields={fields}',
+  TEMPLATE_UPDATE_SUCCESS: 'ActivityTemplate[id={id}] update success mode={mode}',
+  TEMPLATE_ENABLE_START: 'ActivityTemplate[id={id}] enable start backfill through {today}',
+  TEMPLATE_PAUSE_SUCCESS: 'ActivityTemplate[id={id}] paused at {pausedAt}',
+  TEMPLATE_RESUME_SUCCESS: 'ActivityTemplate[id={id}] resumed anchor={anchorDate}',
+  TEMPLATE_DELETE_SUCCESS: 'ActivityTemplate[id={id}] delete success',
+  TEMPLATE_BACKFILL_START: 'ActivityTemplate[id={id}] backfill start mode={mode} window=[{low},{high}]',
+  TEMPLATE_BACKFILL_SUCCESS: 'ActivityTemplate[id={id}] backfill success inserted={inserted} updated={updated} removed={removed}',
+  TEMPLATE_BACKFILL_BUSY: 'ActivityTemplate[id={id}] backfill busy: {reason}',
+  TEMPLATE_BACKFILL_SKIPPED: 'ActivityTemplate[id={id}] backfill skipped: {reason}',
+  TEMPLATE_GENERATION_INSERT: 'ActivityTemplate[id={id}] generation insert occurrence={occurrenceDate} activity={activityId}',
+  TEMPLATE_GENERATION_ADJUSTED: 'ActivityTemplate[id={id}] generation adjusted occurrence={occurrenceDate} preserved',
+  TEMPLATE_GENERATION_DETACHED: 'ActivityTemplate[id={id}] generation detached occurrence={occurrenceDate} activity={activityId}',
+  TEMPLATE_GENERATION_DELETED: 'ActivityTemplate[id={id}] generation tombstone occurrence={occurrenceDate}',
   FACTOR_LIST_START: `CarbonFactor list start categories=${Object.values(ActivityCategory).join(',')}`,
   FACTOR_CREATE_SUCCESS: 'CarbonFactor[id={id}] create success category={category} region={region}',
   FACTOR_CREATE_FAILED: 'CarbonFactor[id={id}] create failed: {field} {reason}',

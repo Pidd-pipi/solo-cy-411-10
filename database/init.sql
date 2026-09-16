@@ -23,6 +23,28 @@ CREATE TABLE IF NOT EXISTS user_roles (
   CONSTRAINT fk_user_roles_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS activity_templates (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  user_id BIGINT NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  category ENUM('transport','energy','food','shopping') NOT NULL,
+  sub_type VARCHAR(64) NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  unit VARCHAR(32) NOT NULL,
+  frequency ENUM('daily','weekly','monthly') NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NULL,
+  anchor_date DATE NOT NULL,
+  effective_date DATE NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  paused_at DATE NULL,
+  last_synced_date DATE NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_templates_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  KEY idx_template_user_enabled (user_id, enabled)
+);
+
 CREATE TABLE IF NOT EXISTS carbon_factors (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   category ENUM('transport','energy','food','shopping') NOT NULL,
@@ -45,10 +67,29 @@ CREATE TABLE IF NOT EXISTS activities (
   carbon_value DECIMAL(12,2) NOT NULL,
   record_date DATE NOT NULL,
   note VARCHAR(255) NULL,
+  template_id BIGINT NULL,
+  is_generated TINYINT(1) NOT NULL DEFAULT 0,
+  manually_adjusted TINYINT(1) NOT NULL DEFAULT 0,
   CONSTRAINT fk_activities_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_activities_factor FOREIGN KEY (factor_id) REFERENCES carbon_factors(id) ON DELETE SET NULL,
+  CONSTRAINT fk_activities_template FOREIGN KEY (template_id) REFERENCES activity_templates(id) ON DELETE SET NULL,
   KEY idx_activity_user_date (user_id, record_date),
-  KEY idx_activity_category (category)
+  KEY idx_activity_category (category),
+  KEY idx_activity_template (template_id)
+);
+
+CREATE TABLE IF NOT EXISTS activity_template_generations (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  template_id BIGINT NOT NULL,
+  activity_id BIGINT NULL,
+  occurrence_date DATE NOT NULL,
+  status ENUM('generated','adjusted','detached','deleted') NOT NULL DEFAULT 'generated',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_generations_template FOREIGN KEY (template_id) REFERENCES activity_templates(id) ON DELETE CASCADE,
+  CONSTRAINT fk_generations_activity FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE SET NULL,
+  UNIQUE KEY uk_generation_template_date (template_id, occurrence_date),
+  KEY idx_generation_activity (activity_id)
 );
 
 CREATE TABLE IF NOT EXISTS goals (

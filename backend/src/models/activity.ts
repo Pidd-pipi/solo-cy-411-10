@@ -1,5 +1,6 @@
 import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { ActivityCategory } from '../constants/activity';
+import { ActivityTemplate } from './activityTemplate';
 import { CarbonFactor } from './carbonFactor';
 import { User } from './user';
 
@@ -35,6 +36,15 @@ export class Activity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   note!: string | null;
 
+  @Column({ name: 'template_id', type: 'bigint', nullable: true })
+  templateId!: number | null;
+
+  @Column({ name: 'is_generated', type: 'tinyint', width: 1, default: 0, transformer: { to: (v: boolean) => (v ? 1 : 0), from: (v: number) => !!v } })
+  isGenerated!: boolean;
+
+  @Column({ name: 'manually_adjusted', type: 'tinyint', width: 1, default: 0, transformer: { to: (v: boolean) => (v ? 1 : 0), from: (v: number) => !!v } })
+  manuallyAdjusted!: boolean;
+
   @ManyToOne(() => User, (user) => user.activities, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user!: User;
@@ -42,4 +52,8 @@ export class Activity {
   @ManyToOne(() => CarbonFactor, (factor) => factor.activities, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'factor_id' })
   factor!: CarbonFactor | null;
+
+  @ManyToOne(() => ActivityTemplate, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'template_id' })
+  template!: ActivityTemplate | null;
 }

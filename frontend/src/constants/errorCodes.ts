@@ -1,5 +1,6 @@
 import { ActivityCategory } from './activity';
 import { GoalStatus } from './goal';
+import { RecurrenceFrequency, RecomputeMode } from './recurrence';
 
 export const ErrorCodes = {
   AUTH_TOKEN_MISSING: 'AUTH_TOKEN_MISSING',
@@ -9,6 +10,13 @@ export const ErrorCodes = {
   USER_NOT_FOUND: 'USER_NOT_FOUND',
   ACTIVITY_CATEGORY_INVALID: `ACTIVITY_CATEGORY_INVALID:${Object.values(ActivityCategory).join('|')}`,
   GOAL_STATUS_INVALID: `GOAL_STATUS_INVALID:${Object.values(GoalStatus).join('|')}`,
+  TEMPLATE_FREQUENCY_INVALID: `TEMPLATE_FREQUENCY_INVALID:${Object.values(RecurrenceFrequency).join('|')}`,
+  TEMPLATE_RECOMPUTE_MODE_INVALID: `TEMPLATE_RECOMPUTE_MODE_INVALID:${Object.values(RecomputeMode).join('|')}`,
+  TEMPLATE_DATE_RANGE_INVALID: 'TEMPLATE_DATE_RANGE_INVALID',
+  TEMPLATE_FACTOR_REQUIRED: 'TEMPLATE_FACTOR_REQUIRED',
+  TEMPLATE_NOT_FOUND: 'TEMPLATE_NOT_FOUND',
+  TEMPLATE_NOT_ENABLED: 'TEMPLATE_NOT_ENABLED',
+  TEMPLATE_ALREADY_PAUSED: 'TEMPLATE_ALREADY_PAUSED',
+  TEMPLATE_BACKFILL_BUSY: 'TEMPLATE_BACKFILL_BUSY',
   DATABASE_FAILED: 'DATABASE_FAILED'
 } as const;
-
