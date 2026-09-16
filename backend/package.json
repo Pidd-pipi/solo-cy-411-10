@@ -8,7 +8,8 @@
     "build": "nest build",
     "typecheck": "tsc --noEmit",
     "typecheck:e2e": "tsc -p tsconfig.e2e.json --noEmit",
-    "test:e2e": "jest --config jest-e2e.json --runInBand --forceExit",
+    "test:e2e": "node test/run-e2e.js",
+    "test:e2e:jest": "jest --config jest-e2e.json --runInBand",
     "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {

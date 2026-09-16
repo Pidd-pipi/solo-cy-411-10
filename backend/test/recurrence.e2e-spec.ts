@@ -68,6 +68,9 @@ describe('recurring activity templates (real MySQL e2e)', () => {
       await db.query('DELETE FROM audit_logs WHERE user_id = ?', [ctx.userId]);
       await db.query('DELETE FROM users WHERE id = ?', [ctx.userId]);
     }
+    // Test-only factors live in a region no seed data uses; purge defensively so
+    // an interrupted failure-atomicity case cannot leave duplicates for the next run.
+    await db.query('DELETE FROM carbon_factors WHERE region = ?', ['RecurrenceTestEmptyRegion']);
   });
 
   async function newUser(region = 'Shanghai'): Promise<ApiContext> {
@@ -368,6 +371,7 @@ describe('recurring activity templates (real MySQL e2e)', () => {
 
     // Provide a factor long enough for template validation, then remove it so the
     // first real backfill fails on factor resolution (region is unique to this test).
+    await db.query('DELETE FROM carbon_factors WHERE region = ?', [region]);
     await db.query(
       `INSERT INTO carbon_factors (category, sub_type, factor_value, unit, region)
        VALUES ('transport', 'metro', 0.0520, 'km', ?)`,
